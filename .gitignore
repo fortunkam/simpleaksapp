@@ -1,0 +1,6 @@
+useful-commands.sh
+**/obj/*
+**/bin/*
+
+**/.vscode
+
