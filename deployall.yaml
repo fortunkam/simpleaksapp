@@ -19,7 +19,7 @@ spec:
     spec:
       hostname: simpleappapi
       containers:
-      - image: simpleappacr.azurecr.io/testapi:v1
+      - image: mfaksacr.azurecr.io/testapi:v1
         name: testapi
         ports:
         - containerPort: 80
@@ -47,7 +47,7 @@ spec:
     spec:
       containers:
         - name: testmvc2
-          image: simpleappacr.azurecr.io/testmvc:v2
+          image: mfaksacr.azurecr.io/testmvc:v2
           ports:
             - containerPort: 80
             - containerPort: 443
@@ -68,6 +68,8 @@ metadata:
   labels:
     app: simpleapp
   name: simpleapp
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
 spec:
   type: LoadBalancer
   ports:
