@@ -1,0 +1,95 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+
+
+variables:
+  azureSubscription: MFSubServiceConnection
+  acrDetails: '{"loginServer":"mfaksacr.azurecr.io", "id" : "/subscriptions/44e1dac0-0651-4835-8781-ee7b6e6f238f/resourceGroups/mfaks-spoke-rg/providers/Microsoft.ContainerRegistry/registries/mfaksacr"}'
+  kubernetesServiceConnection: 'MF Private AKS default'
+
+stages:
+  - stage: Build
+    displayName: Build stage
+    jobs:
+    - job: Build
+      displayName: Build Job
+      pool:
+        name: 'SelfHostLinuxBuildAgents'
+      steps:
+      - task: Docker@0
+        displayName: 'Build API'
+        inputs:
+          azureSubscription: $(azureSubscription)
+          azureContainerRegistry: $(acrDetails)
+          dockerFile: testapi/Dockerfile
+          imageName: 'testapi:$(Build.BuildId)'
+          includeLatestTag: true
+      - task: Docker@0
+        displayName: 'Push API'
+        inputs:
+          azureSubscription: $(azureSubscription)
+          azureContainerRegistry: $(acrDetails)
+          action: 'Push an image'
+          imageName: 'testapi:$(Build.BuildId)'
+          includeLatestTag: true
+      - task: Docker@0
+        displayName: 'Build MVC'
+        inputs:
+          azureSubscription: $(azureSubscription)
+          azureContainerRegistry: $(acrDetails)
+          dockerFile: testmvc/Dockerfile
+          imageName: 'testmvc:$(Build.BuildId)'
+          includeLatestTag: true
+      - task: Docker@0
+        displayName: 'Push API'
+        inputs:
+          azureSubscription: $(azureSubscription)
+          azureContainerRegistry: $(acrDetails)
+          action: 'Push an image'
+          imageName: 'testmvc:$(Build.BuildId)'
+          includeLatestTag: true
+      - bash: |
+          echo $YAMLFILE
+          echo $BUILDID
+          
+          sed -i -E "s/mfaksacr\.azurecr\.io\/test(\w*):v[0-9]$*/mfaksacr.azurecr.io\/test\1:$BUILDID/g" $YAMLFILE
+          
+        displayName: 'Update Build Id'
+        env:
+          YAMLFILE: deployall.yaml
+          BUILDID: $(Build.BuildId)
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish Pipeline Artifact'
+        inputs:
+          targetPath: deployall.yaml
+          artifact: kubeyaml
+  - stage: Deploy
+    displayName: Deploy stage
+    dependsOn: Build
+    jobs: 
+    - deployment: Deploy
+      displayName: Deploy Job
+      pool: 
+        name: SelfHostLinuxDeployAgents
+      environment: Production
+      strategy: 
+        runOnce:
+          deploy:
+            steps:
+            - task: DownloadPipelineArtifact@2
+              inputs:
+                artifactName: 'kubeyaml'
+                downloadPath: '$(System.ArtifactsDirectory)/kubeyaml'
+            - task: Kubernetes@0
+              displayName: 'kubectl apply'
+              inputs:
+                kubernetesServiceConnection: $(kubernetesServiceConnection)
+                command: apply
+                useConfigurationFile: true
+                configuration: '$(System.ArtifactsDirectory)/kubeyaml/deployall.yaml'
